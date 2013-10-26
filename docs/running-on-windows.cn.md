@@ -9,9 +9,9 @@
 
 # 开始安装
 
-1. 安装nodejs(http://nodejs.org/download/)(0.8版本及以上)，通过官方的安装程序来安装。
+1. 安装nodejs(http://nodejs.org/download/)(0.8版本及以上), 通过官方的安装程序来安装。
 
-2. 安装android的sdk包，(http://developer.android.com/sdk/index.html)，运行依赖sdk中的'android'工具。并确保你安装了Level17或以上的版本api。设置`ANDROID_HOME`系统变量为你的Android SDK路径，并把tools platform-tools两个目录加入到系统的Path路径里。因为这里面包含有一些执行命令
+2. 安装android的sdk包，(http://developer.android.com/sdk/index.html), 运行依赖sdk中的'android'工具。并确保你安装了Level17或以上的版本api。设置`ANDROID_HOME`系统变量为你的Android SDK路径，并把tools platform-tools两个目录加入到系统的Path路径里。因为这里面包含有一些执行命令
 
 3. 安装java的JDK，并设置`JAVA_HOME` 变量为你的JDK目录。
 
@@ -41,6 +41,7 @@
 
 
 
+# 最简单的安装方式
 出于对官方文档的尊重，我按照原文翻译，如下介绍我的安装心得。官方提到的一些工具，其实并不需要安装。
 下面介绍我已经测试过的安装和使用过程
 
@@ -55,3 +56,6 @@
 
 appiun会启动2个端口，一个是4723，用于webdriver协议，一个是4724，是用于和android交互使用的
 
+
+如果有任何疑问，欢迎到testerhome.com来交流
+作者：seveniruby
