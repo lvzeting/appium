@@ -11,6 +11,8 @@ should_reset_selendroid=false
 should_reset_gappium=false
 should_reset_firefoxos=false
 should_reset_realsafari=false
+code_sign_identity='';
+provisioning_profile='';
 include_dev=false
 appium_home=$(pwd)
 reset_successful=false
@@ -26,6 +28,8 @@ do
         "--android") should_reset_android=true;;
         "--ios") should_reset_ios=true;;
         "--real-safari") should_reset_realsafari=true;;
+        "--code-sign") code_sign_identity=$2;;
+        "--profile") provisioning_profile=$2;;
         "--selendroid") should_reset_selendroid=true;;
         "--firefoxos") should_reset_firefoxos=true;;
         "--gappium") should_reset_gappium=true;;
@@ -34,10 +38,15 @@ do
         "--verbose") verbose=true;;
         "--hardcore") hardcore=true;;
     esac
-    shift
+    if [[ -n "$2" ]] && [[ "$2" != --* ]]; then
+      shift
+      shift
+    else
+      shift
+    fi
 done
 
-if ! $should_reset_android && ! $should_reset_ios && ! $should_reset_selendroid && ! $should_reset_gappium && ! $should_reset_firefoxos && ! $should_reset_realsafari; then
+if ! $should_reset_android && ! $should_reset_ios && ! $should_reset_selendroid && ! $should_reset_gappium && ! $should_reset_firefoxos ; then
     should_reset_android=true
     should_reset_ios=true
     should_reset_selendroid=true
@@ -111,9 +120,11 @@ reset_ios() {
     run_cmd rm -rf build/udidetect
     run_cmd mkdir build/udidetect
     run_cmd cp -R submodules/udidetect/udidetect build/udidetect/
-    echo "* Linking status/xpath libs for uiauto"
-    run_cmd ln -sf $appium_home/lib/server/status.js $appium_home/lib/devices/ios/uiauto/lib/status.js
-    run_cmd ln -sf $appium_home/lib/xpath.js $appium_home/lib/devices/ios/uiauto/appium/xpath.js
+    echo "* Copying status/xpath libs for uiauto"
+    run_cmd rm -rf $appium_home/lib/devices/ios/uiauto/lib/status.js
+    run_cmd cp $appium_home/lib/server/status.js $appium_home/lib/devices/ios/uiauto/lib/status.js
+    run_cmd rm -rf $appium_home/lib/devices/ios/uiauto/appium/xpath.js
+    run_cmd cp $appium_home/lib/xpath.js $appium_home/lib/devices/ios/uiauto/appium/xpath.js
     if $include_dev ; then
         if $hardcore ; then
             echo "* Clearing out old UICatalog download"
@@ -149,18 +160,32 @@ reset_ios() {
     echo "* Cloning/updating SafariLauncher"
     run_cmd git submodule update --init submodules/SafariLauncher
     echo "* Building SafariLauncher"
-    run_cmd $grunt buildSafariLauncherApp:iphonesimulator
+    run_cmd rm -f submodules/Safarilauncher/target.xcconfig
+    echo "BUNDLE_ID = com.bytearc.SafariLauncher" >> submodules/Safarilauncher/target.xcconfig
+    run_cmd $grunt buildSafariLauncherApp:iphonesimulator:"target.xcconfig"
     echo "* Copying SafariLauncher to build"
     run_cmd rm -rf build/SafariLauncher
     run_cmd mkdir -p build/SafariLauncher
     run_cmd zip -r build/SafariLauncher/SafariLauncherSim submodules/SafariLauncher/build/Release-iphonesimulator/SafariLauncher.app
     if $should_reset_realsafari; then
         echo "* Building SafariLauncher for real devices"
-        run_cmd $grunt buildSafariLauncherApp:iphoneos
+        run_cmd rm -f submodules/Safarilauncher/target.xcconfig
+        echo "BUNDLE_ID = com.bytearc.SafariLauncher" >> submodules/Safarilauncher/target.xcconfig
+        if [[ ! -z $code_sign_identity ]]; then
+          echo "IDENTITY_NAME = " $code_sign_identity >> submodules/Safarilauncher/target.xcconfig
+        else
+          echo "IDENTITY_NAME = iPhone Developer" >> submodules/Safarilauncher/target.xcconfig
+        fi
+        echo "IDENTITY_CODE = " $provisioning_profile >> submodules/Safarilauncher/target.xcconfig
+        run_cmd $grunt buildSafariLauncherApp:iphoneos:"target.xcconfig"
         echo "* Copying SafariLauncher for real devices to build"
         run_cmd zip -r build/SafariLauncher/SafariLauncher submodules/SafariLauncher/build/Release-iphoneos/SafariLauncher.app
     fi
-
+    echo "* Cloning/updating libimobiledevice-macosx"
+    run_cmd git submodule update --init submodules/libimobiledevice-macosx
+    echo "* Copying libimobiledevice-macosx to build"
+    run_cmd rm -rf build/libimobiledevice-macosx
+    run_cmd cp -r submodules/libimobiledevice-macosx build/libimobiledevice-macosx
 }
 
 get_apidemos() {

@@ -30,13 +30,14 @@ var driverBlock = function(tests, host, port, caps, extraCaps) {
   port = (typeof port === "undefined" || port === null) ? _.clone(defaultPort) : port;
   caps = (typeof caps === "undefined" || caps === null) ? _.clone(defaultCaps) : caps;
   caps = _.extend(caps, typeof extraCaps === "undefined" ? {} : extraCaps);
-  caps.launchTimeout = 18000;
+  caps.launchTimeout = 35000;
   var driverHolder = {driver: null, sessionId: null};
   var expectConnError = extraCaps && extraCaps.expectConnError;
 
   beforeEach(function(done) {
     driverHolder.driver = wd.remote(host, port);
     var timeoutMs = caps.launchTimeout + 5000;
+    var waitBetweenTries = 3000;
     var tries = 0;
 
     var getSessionWithRetry = function() {
@@ -46,8 +47,9 @@ var driverBlock = function(tests, host, port, caps, extraCaps) {
           alreadyReturned = true;
           if (err && tries < 3) {
             tries++;
-            console.log("Could not get session, trying again");
-            setTimeout(getSessionWithRetry, 1000);
+            console.log("Could not get session, trying again (" +
+                        err.message + ")");
+            setTimeout(getSessionWithRetry, waitBetweenTries);
           } else {
             done(err);
           }

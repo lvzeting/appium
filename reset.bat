@@ -51,7 +51,7 @@ if %doAndroid% == 1 (
   ECHO.
   ECHO =====Resetting Unlock.apk=====
   ECHO.
-  CALL :runCmd "RD /S /Q build\unlock_apk"
+  CALL :runCmd "RD /S /Q build\unlock_apk | VER > NUL"
   CALL :runCmd "MKDIR build\unlock_apk"
   ECHO Building Unlock.apk
   CALL :runCmd "git submodule update --init submodules\unlock_apk"
@@ -92,7 +92,9 @@ IF %doSelendroid% == 1 (
   CALL :runCmd "git submodule update --init submodules\selendroid"
   CALL :runCmd "RD /S /Q selendroid | VER > NUL"
   ECHO Building selendroid server and supporting libraries
+  CALL :runCmd "set MAVEN_OPTS=-Xss1024k"
   CALL :runCmd "node_modules\.bin\grunt buildSelendroidServer"
+  CALL :runCmd "set MAVEN_OPTS="
   
   :: Reset Selendroid Dev
   IF %doDev% == 1 (

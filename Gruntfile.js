@@ -71,6 +71,7 @@ module.exports = function(grunt) {
         reporter: 'spec'
       }
     }
+    , maxBuffer: 2000*1024
   });
 
   grunt.loadNpmTasks('grunt-mocha-test');
@@ -108,8 +109,8 @@ module.exports = function(grunt) {
   grunt.registerTask('buildApp', "Build the test app", function(appDir, sdk) {
     buildApp(appDir, this.async(), sdk);
   });
-  grunt.registerTask('buildSafariLauncherApp', "Build the SafariLauncher app", function(sdk) {
-    buildSafariLauncherApp(this.async(), sdk);
+  grunt.registerTask('buildSafariLauncherApp', "Build the SafariLauncher app", function(sdk, xcconfig) {
+    buildSafariLauncherApp(this.async(), sdk, xcconfig);
   });
   grunt.registerTask('signApp', "Sign the test app", function(certName) {
     signApp("TestApp", certName, this.async());

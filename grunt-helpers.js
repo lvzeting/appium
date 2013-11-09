@@ -167,75 +167,139 @@ module.exports.setGitRev = function(grunt, rev, cb) {
   exports.writeConfigKey(grunt, "git-sha", rev, cb);
 };
 
-module.exports.authorize = function(grunt, cb) {
-  // somewhat messily ported from penguinho's authorize.py
-  var authFile = '/System/Library/Security/authorization.plist';
-  try {
-    fs.existsSync(authFile);
-  } catch (e) {
-    // on Mountain Lion auth is in a different place
-    authFile = '/etc/authorization';
+var auth_enableDevTools = function(grunt, cb) {
+  grunt.log.writeln("Enabling DevToolsSecurity");
+  exec('DevToolsSecurity --enable', function(err) {
+    if (err) grunt.fatal(err);
+    cb();
+  });
+};
+
+var auth_getTaskportSection = function(grunt, authFileData) {
+  grunt.log.writeln("Getting system.privilege.taskport section");
+  var re = /<key>system.privilege.taskport<\/key>\s*\n\s*<dict>\n\s*<key>allow-root<\/key>\n\s*(<[^>]+>)/;
+  var match = re.exec(authFileData);
+  if (!match) {
+    grunt.fatal("Could not find the system.privilege.taskport key");
+  } else {
+    return match;
   }
-  exec('DevToolsSecurity --enable', function(err, stdout, stderr) {
-    if (err) throw err;
-    fs.readFile(authFile, 'utf8', function(err, data) {
-      if (err) throw err;
-      var origData = data;
-      var re = /<key>system.privilege.taskport<\/key>\s*\n\s*<dict>\n\s*<key>allow-root<\/key>\n\s*(<[^>]+>)/;
-      var match = re.exec(data);
-      if (!match) {
-        grunt.fatal("Could not find the system.privilege.taskport key in /etc/authorization");
-      } else {
-        if (!(/<false\/>/.exec(match[0]))) {
-          console.log("/etc/authorization has already been modified to support appium");
-          return cb();
-        } else {
-          var newText = match[0].replace(match[1], '<true/>');
-          var newContent = data.replace(match[0], newText);
-          temp.open('authorization.backup.', function (err, info) {
-            fs.write(info.fd, origData);
-            fs.close(info.fd, function(err) {
-              if (err) throw err;
-              grunt.log.writeln("Backed up to " + info.path);
-              var diff = difflib.contextDiff(origData.split("\n"), newContent.split("\n"), {fromfile: "before", tofile: "after"});
-              grunt.log.writeln("Check this diff to make sure the change looks cool:");
-              grunt.log.writeln(diff.join("\n"));
-              prompt.start();
-              var promptProps = {
-                properties: {
-                  proceed: {
-                    pattern: /^(y|n)/
-                    , description: "Make changes? [y/n] "
-                  }
-                }
-              };
-              prompt.get(promptProps, function(err, result) {
-                if (result.proceed == "y") {
-                  fs.writeFile(authFile, newContent, function(err) {
-                    if (err) {
-                      if (err.code === "EACCES") {
-                        grunt.fatal("You need to run this as sudo!");
-                      } else {
-                        throw err;
-                      }
-                    }
-                    grunt.log.writeln("Wrote new /etc/authorization");
-                    cb();
-                  });
-                } else {
-                  grunt.log.writeln("No changes were made");
-                  cb();
-                }
-              });
-            });
-          });
-        }
-      }
+};
+
+var auth_writeAuthBackup = function(grunt, origData, cb) {
+  grunt.log.writeln("Writing backup of authFile");
+  temp.open('authorization.backup.', function (err, info) {
+    if (err) grunt.fatal(err);
+    fs.close(info.fd, function(err) {
+      if (err) grunt.fatal(err);
+      fs.writeFile(info.path, origData, function(err) {
+        if (err) grunt.fatal(err);
+        grunt.log.writeln("Backed up to " + info.path);
+        cb();
+      });
     });
   });
 };
 
-module.exports.build = function(appRoot, cb, sdk) {
+var auth_confirmAuthDiff = function(grunt, diff, cb) {
+  grunt.log.writeln("Check this diff to make sure the change looks cool:");
+  grunt.log.writeln(diff.join("\n"));
+  prompt.start();
+  var promptProps = {
+    properties: {
+      proceed: {
+        pattern: /^(y|n)/
+        , description: "Make changes? [y/n] "
+      }
+    }
+  };
+  prompt.get(promptProps, function(err, result) {
+    if (err) grunt.fatal(err);
+    if (result.proceed == "y") {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  });
+};
+
+var auth_writeAuthFile = function(grunt, cb) {
+  grunt.log.writeln("Getting authorization file");
+  var authFile = '/System/Library/Security/authorization.plist';
+  if (!fs.existsSync(authFile)) {
+    // on Mountain Lion auth is in a different place
+    authFile = '/etc/authorization';
+  }
+  if (!fs.existsSync(authFile)) {
+    grunt.fatal("could not find authorization file");
+  }
+  fs.readFile(authFile, {encoding: 'utf8'}, function(err, data) {
+    if (err) grunt.fatal(err);
+    var taskportSection;
+    try {
+      taskportSection = auth_getTaskportSection(grunt, data);
+    } catch (e) {
+      grunt.fatal(e);
+    }
+    if (!(/<false\/>/.exec(taskportSection[0]))) {
+      grunt.log.writeln(authFile + " has already been modified to support appium");
+      return cb();
+    } else {
+      auth_writeAuthBackup(grunt, data, function(err) {
+        if (err) grunt.fatal(err);
+        var newText = taskportSection[0].replace(taskportSection[1], '<true/>');
+        var newContent = data.replace(taskportSection[0], newText);
+        var diff = difflib.contextDiff(data.split("\n"),
+                                       newContent.split("\n"),
+                                       {fromfile: "before", tofile: "after"});
+        auth_confirmAuthDiff(grunt, diff, function(err, confirmed) {
+          if (err) grunt.fatal(err);
+          if (confirmed) {
+            fs.writeFile(authFile, newContent, function(err) {
+              if (err) {
+                if (err.code === "EACCES") {
+                  return grunt.fatal("You need to run this as sudo!");
+                } else {
+                  return grunt.fatal(err);
+                }
+              }
+              grunt.log.writeln("Wrote new " + authFile);
+              cb();
+            });
+          } else {
+            grunt.log.writeln("No changes were made");
+            cb();
+          }
+        });
+      });
+    }
+  });
+};
+
+var auth_updateSecurityDb = function(grunt, cb) {
+  grunt.log.writeln("Updating security db");
+  var cmd = "security authorizationdb write system.privilege.taskport." +
+            "allow-root allow";
+  exec(cmd, function(err) {
+    if (err) grunt.fatal(err);
+    cb();
+  });
+};
+
+module.exports.authorize = function(grunt, cb) {
+  auth_enableDevTools(grunt, function(err) {
+    if (err) grunt.fatal(err);
+    auth_writeAuthFile(grunt, function(err) {
+      if (err) grunt.fatal(err);
+      auth_updateSecurityDb(grunt, function(err) {
+        if (err) grunt.fatal(err);
+        cb();
+      });
+    });
+  });
+};
+
+module.exports.build = function(appRoot, cb, sdk, xcconfig) {
   var next = function() {
     var cmd = 'xcodebuild -sdk ' + sdk + ' clean';
     console.log('Using sdk: ' + sdk + '...');
@@ -247,6 +311,9 @@ module.exports.build = function(appRoot, cb, sdk) {
       }
       console.log("Building app...");
       var args = ['-sdk', sdk];
+      if (typeof xcconfig !== "undefined") {
+        args = args.concat(['-xcconfig', xcconfig]);
+      }
       xcode = spawn('xcodebuild', args, {
         cwd: appRoot
       });
@@ -302,7 +369,7 @@ module.exports.signApp = function(appName, certName, cb) {
   });
 };
 
-module.exports.buildSafariLauncherApp = function(cb, sdk) {
+module.exports.buildSafariLauncherApp = function(cb, sdk, xcconfig) {
   var appRoot = path.resolve(__dirname, "submodules", "SafariLauncher");
   module.exports.build(appRoot, function(err) {
     if (err !== null) {
@@ -311,7 +378,7 @@ module.exports.buildSafariLauncherApp = function(cb, sdk) {
     } else {
       cb(true);
     }
-  }, sdk);
+  }, sdk, xcconfig);
 };
 
 
